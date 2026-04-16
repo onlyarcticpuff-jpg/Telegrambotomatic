@@ -53,7 +53,7 @@ const server = http.createServer(async (req, res) => {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "openai/gpt-3.5-turbo",
+        model: "openai/gpt-oss-20b:free",
         messages: [
 {
   role: "system",
