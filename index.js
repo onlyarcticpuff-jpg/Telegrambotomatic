@@ -90,7 +90,7 @@ const server = http.createServer(async (req, res) => {
         "X-Title": "telegram-bot"
       },
       body: JSON.stringify({
-        model: "google/gemma-4-9b-it",
+        model: "google/gemma-4-26b-a4b-it",
         messages: [
           {
             role: "system",
