@@ -22,32 +22,44 @@ const server = http.createServer(async (req, res) => {
     return res.end("OK");
   }
 
-  let body = "";
-  for await (const chunk of req) {
-    body += chunk;
-  }
-
-  const data = JSON.parse(body || "{}");
-
-  if (!data.message) {
-    res.writeHead(200);
-    return res.end();
-  }
-
-  const chatId = data.message.chat.id;
-  const userText = data.message.text;
-
   try {
+    // ✅ FIX: manual body parsing
+    let body = "";
+    for await (const chunk of req) {
+      body += chunk;
+    }
+
+    const data = JSON.parse(body || "{}");
+
+    const chatId = data?.message?.chat?.id;
+    const userText = data?.message?.text;
+
+    if (!chatId) {
+      res.writeHead(200);
+      return res.end();
+    }
+
+    if (!userText) {
+      await sendMessage(chatId, "Send a text message bro 😭");
+      res.writeHead(200);
+      return res.end();
+    }
+
+    // ✅ Gemini request
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify({
           contents: [
             {
               parts: [
-                { text: `Answer clearly:\n${userText}` }
+                {
+                  text: `Give a short, clear answer:\n${userText}`
+                }
               ]
             }
           ]
@@ -55,18 +67,34 @@ const server = http.createServer(async (req, res) => {
       }
     );
 
+    // ✅ Handle API errors properly
+    if (!response.ok) {
+      const err = await response.text();
+      console.error("Gemini error:", err);
+      await sendMessage(chatId, "API error 💀 try again later");
+      res.writeHead(200);
+      return res.end();
+    }
+
     const gemini = await response.json();
 
     let reply = "No response";
 
-    if (gemini.candidates?.length) {
-      reply = gemini.candidates[0].content?.parts?.map(p => p.text).join(" ");
+    if (gemini?.candidates?.length) {
+      const parts = gemini.candidates[0].content?.parts;
+      if (parts?.length) {
+        reply = parts.map(p => p.text || "").join(" ");
+      }
+    }
+
+    if (!reply || reply.length < 2) {
+      reply = "Try again bro 😤";
     }
 
     await sendMessage(chatId, reply);
 
-  } catch (e) {
-    console.error(e);
+  } catch (err) {
+    console.error("SERVER CRASH:", err);
   }
 
   res.writeHead(200);
