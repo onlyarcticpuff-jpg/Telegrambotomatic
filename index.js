@@ -8,26 +8,32 @@ const TELEGRAM_API = `https://api.telegram.org/bot${TOKEN}`;
 
 const memory = {};
 
-// 🧠 coin mapping (you can extend anytime)
+// 🧠 coin map (STACKED)
 const coins = {
-  btc: "bitcoin",
-  bitcoin: "bitcoin",
-  eth: "ethereum",
-  ethereum: "ethereum",
-  sol: "solana",
-  solana: "solana",
-  ltc: "litecoin",
-  litecoin: "litecoin",
-  trx: "tron",
-  tron: "tron",
-  pol: "matic-network",
-  matic: "matic-network",
+  btc: "bitcoin", bitcoin: "bitcoin",
+  eth: "ethereum", ethereum: "ethereum",
+  sol: "solana", solana: "solana",
+  ltc: "litecoin", litecoin: "litecoin",
+  trx: "tron", tron: "tron",
+  ton: "the-open-network", toncoin: "the-open-network",
+  pol: "matic-network", matic: "matic-network",
   doge: "dogecoin",
   xrp: "ripple",
   ada: "cardano",
   bnb: "binancecoin",
   avax: "avalanche-2"
 };
+
+// 📊 detect coin (FIXED)
+function detectCoin(text) {
+  const lower = text.toLowerCase();
+  for (const key in coins) {
+    if (new RegExp(`\\b${key}\\b`).test(lower)) {
+      return coins[key];
+    }
+  }
+  return null;
+}
 
 // 📊 CoinGecko
 async function getCryptoData(id) {
@@ -69,52 +75,53 @@ async function searchWeb(query) {
   }
 }
 
-// 🧠 detect coin
-function detectCoin(text) {
-  const lower = text.toLowerCase();
-  return Object.keys(coins).find(c => lower.includes(c));
-}
-
-// 🧠 wallet detect (very basic)
+// 👛 wallet detect
 function detectWallet(text) {
-  return text.match(/[13][a-km-zA-HJ-NP-Z1-9]{25,34}/) || // BTC
-         text.match(/^0x[a-fA-F0-9]{40}$/) || // ETH
-         text.match(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/); // SOL/LTC-ish
+  return text.match(/[13][a-km-zA-HJ-NP-Z1-9]{25,34}/) ||
+         text.match(/^0x[a-fA-F0-9]{40}$/);
 }
 
-// 💰 wallet tracker (no API key)
+// 👛 wallet tracker
 async function trackWallet(address) {
   try {
-    // ETH (Etherscan public)
     if (address.startsWith("0x")) {
-      const res = await fetch(
-        `https://api.ethplorer.io/getAddressInfo/${address}?apiKey=freekey`
-      );
+      const res = await fetch(`https://api.ethplorer.io/getAddressInfo/${address}?apiKey=freekey`);
       const data = await res.json();
-      return `ETH wallet balance: ${data.ETH?.balance || 0}`;
+      return `ETH balance: ${data.ETH?.balance || 0}`;
     }
 
-    // BTC (blockchain.info)
     if (address.startsWith("1") || address.startsWith("3")) {
-      const res = await fetch(
-        `https://blockchain.info/q/addressbalance/${address}`
-      );
+      const res = await fetch(`https://blockchain.info/q/addressbalance/${address}`);
       const sat = await res.text();
       return `BTC balance: ${(sat / 1e8).toFixed(4)}`;
     }
 
-    return "wallet tracking limited for this chain";
+    return "wallet tracking limited";
   } catch {
-    return "couldn't fetch wallet 💀";
+    return "wallet error 💀";
   }
 }
 
 // 📩 send
 async function sendMessage(chatId, text) {
-  await fetch(`${TELEGRAM_API}/sendMessage`, {
+  const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ chat_id: chatId, text })
+  });
+  return res.json();
+}
+
+// ✏️ edit
+async function editMessage(chatId, messageId, text) {
+  await fetch(`${TELEGRAM_API}/editMessageText`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      message_id: messageId,
+      text
+    })
   });
 }
 
@@ -134,33 +141,38 @@ const server = http.createServer(async (req, res) => {
     // 🧠 memory
     if (!memory[chatId]) memory[chatId] = [];
     memory[chatId].push(userText);
-    memory[chatId] = memory[chatId].slice(-4);
+    memory[chatId] = memory[chatId].slice(-5);
 
     const history = memory[chatId].join("\n");
 
-    // 🔍 wallet tracking
+    // 👛 wallet
     const wallet = detectWallet(userText);
     if (wallet) {
+      const msg = await sendMessage(chatId, "Scanning wallet 👛...");
       const result = await trackWallet(wallet[0]);
-      await sendMessage(chatId, result);
+      await editMessage(chatId, msg.result.message_id, result);
       return res.end();
     }
 
-    // 📊 coin data
+    // 📊 coin
     let priceContext = "";
-    const coinKey = detectCoin(userText);
+    const coinId = detectCoin(userText);
 
-    if (coinKey) {
-      const data = await getCryptoData(coins[coinKey]);
-
+    if (coinId) {
+      const data = await getCryptoData(coinId);
       if (data?.price) {
-        priceContext = `${coins[coinKey]}: $${data.price} (${data.change?.toFixed(2)}%)`;
+        priceContext = `${coinId}: $${data.price} (${data.change?.toFixed(2)}%)`;
       }
     }
 
-    // 🌐 web search
+    // 🌐 search
     let webContext = "";
-    if (!coinKey && /why|news|what|update/i.test(userText)) {
+    const needsSearch = /why|news|happening|update|explain|reason|cause/i.test(userText);
+
+    let loadingMsg;
+
+    if (needsSearch) {
+      loadingMsg = await sendMessage(chatId, "🔍 Searching...");
       webContext = await searchWeb(userText);
     }
 
@@ -178,13 +190,15 @@ const server = http.createServer(async (req, res) => {
             role: "system",
             content: `You are Mr Prophet 🎩.
 
-You can:
-- use price data if given (never guess)
-- use web context if given
-- react normally otherwise
+You act, you don't ask.
 
-Crypto = trader tone  
-Other = chill human
+- If coin mentioned → use price
+- If web context exists → use it
+- NEVER ask for data
+- NEVER say you can't search
+
+Crypto = confident trader  
+Other = chill  
 
 Short replies only.
 
@@ -206,10 +220,14 @@ ${webContext}`
     });
 
     const result = await aiRes.json();
-    const reply =
-      result?.choices?.[0]?.message?.content || "no response 💀";
+    const reply = result?.choices?.[0]?.message?.content || "no response 💀";
 
-    await sendMessage(chatId, reply);
+    // ✏️ edit or send
+    if (loadingMsg) {
+      await editMessage(chatId, loadingMsg.result.message_id, reply);
+    } else {
+      await sendMessage(chatId, reply);
+    }
 
   } catch (e) {
     console.log(e);
