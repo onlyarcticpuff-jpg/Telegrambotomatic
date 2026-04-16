@@ -104,7 +104,13 @@ If image is provided → analyze it like a trader.
 Use recent context if helpful:
 ${history}
 
-Be short, realistic, and slightly confident.`
+Be short, realistic, and slightly confident.
+If the message is NOT about crypto, trading, gambling, or markets:
+respond like a normal funny guy.
+
+DO NOT use trading analogies.
+DO NOT force crypto language.
+also use emojis but not alot just add a touch tk the messages and be funny`
           },
           {
             role: "user",
