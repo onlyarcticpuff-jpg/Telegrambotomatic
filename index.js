@@ -53,7 +53,7 @@ const server = http.createServer(async (req, res) => {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "google/gemma-4-26b-a4b-it:free",
+        model: "google/gemma-4-26b-a4b-it",
         messages: [
 {
   role: "system",
