@@ -94,12 +94,12 @@ const server = http.createServer(async (req, res) => {
         messages: [
           {
             role: "system",
-            content: `You are a chill crypto trading assistant.
+            content: `You are a chill bro.
 
 Talk casually like a real person.
 No definitions. No textbook tone.
 
-If image is provided → analyze it like a trader.
+If image is provided → analyze it.
 
 Use recent context if helpful:
 ${history}
