@@ -1,3 +1,5 @@
+const http = require("http");
+
 const TOKEN = process.env.BOT_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -9,63 +11,69 @@ async function sendMessage(chatId, text) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       chat_id: chatId,
-      text: text
+      text
     })
   });
 }
 
-module.exports = async (req, res) => {
+const server = http.createServer(async (req, res) => {
+  if (req.method !== "POST") {
+    res.writeHead(200);
+    return res.end("OK");
+  }
+
+  let body = "";
+  for await (const chunk of req) {
+    body += chunk;
+  }
+
+  const data = JSON.parse(body || "{}");
+
+  if (!data.message) {
+    res.writeHead(200);
+    return res.end();
+  }
+
+  const chatId = data.message.chat.id;
+  const userText = data.message.text;
+
   try {
-    const body = req.body;
-
-    if (!body.message) {
-      return res.status(200).end();
-    }
-
-    const chatId = body.message.chat.id;
-    const userText = body.message.text;
-
-    // 🧠 Gemini call
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [
             {
               parts: [
-                {
-                  text: `You are a chill crypto + trading assistant.
-Give short, clear, realistic analysis (not financial advice).
-Question: ${userText}`
-                }
+                { text: `Answer clearly:\n${userText}` }
               ]
             }
           ]
-        }),
+        })
       }
     );
 
-    const data = await response.json();
+    const gemini = await response.json();
 
     let reply = "No response";
 
-    if (data.candidates && data.candidates.length > 0) {
-      const parts = data.candidates[0].content?.parts;
-      if (parts) {
-        reply = parts.map(p => p.text || "").join(" ");
-      }
+    if (gemini.candidates?.length) {
+      reply = gemini.candidates[0].content?.parts?.map(p => p.text).join(" ");
     }
 
     await sendMessage(chatId, reply);
 
-    return res.status(200).end();
-
-  } catch (err) {
-    console.error(err);
-    return res.status(200).end();
+  } catch (e) {
+    console.error(e);
   }
-};
+
+  res.writeHead(200);
+  res.end();
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log("Bot running on port", PORT);
+});
