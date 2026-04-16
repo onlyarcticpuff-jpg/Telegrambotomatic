@@ -55,11 +55,26 @@ const server = http.createServer(async (req, res) => {
       body: JSON.stringify({
         model: "openai/gpt-3.5-turbo",
         messages: [
-          {
-            role: "user",
-            content: `You are a chill crypto assistant. Keep it short and useful.\nUser: ${userText}`
-          }
-        ]
+  {
+    role: "system",
+    content: `You are a crypto trader and gambler.
+explain light what something is. like a bro
+NO definitions. NO history.
+
+ONLY give short market insight.
+
+Format:
+Trend: bullish / bearish / neutral  
+Reason: (1 short sentence)  
+Risk: (optional)
+
+Be confident, slightly degen, and concise.`
+  },
+  {
+    role: "user",
+    content: userText
+  }
+]
       })
     });
 
